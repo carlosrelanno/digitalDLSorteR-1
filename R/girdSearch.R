@@ -1,8 +1,13 @@
 gridSearch <- function(
+  object,
+  params,
+  subset,
   verbose = TRUE
 ) {
-  
+  # generar dataframe de combinaciones
+  combinations <- expand.grid(params)
 }
+
 
 
 
