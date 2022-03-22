@@ -59,5 +59,6 @@ Collate:
     'loadData.R'
     'simBulk.R'
     'simSingleCell.R'
+    'girdSearch.R'
     'utils.R'
 VignetteBuilder: knitr
