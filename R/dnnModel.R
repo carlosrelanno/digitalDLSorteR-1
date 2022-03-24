@@ -491,7 +491,9 @@ trainDigitalDLSorterModel <- function(
   function() {
     data.index <- seq(nb + 1, nb + batch.size)
     nb <<- nb + batch.size
-    if (nb > n.samples) {
+    ## take care of this line: sth is here and Idk it haha (here not tested)
+    ## if (nb > n.samples) { 
+    if (nb >= n.samples) {
       data.index <- data.index[data.index <= n.samples]
       fill <- batch.size - length(data.index)
       data.index <- c(data.index, seq(min.index + 1, min.index + fill))
@@ -549,7 +551,9 @@ trainDigitalDLSorterModel <- function(
   function() {
     data.index <- seq(nb + 1, nb + batch.size)
     nb <<- nb + batch.size
-    if (nb > n.samples) {
+    ## take care of this line: sth is here and Idk it haha
+    ## if (nb > n.samples) { 
+    if (nb >= n.samples) {
       data.index <- data.index[data.index <= n.samples]
       nb <<- 0
     }
