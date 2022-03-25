@@ -39,9 +39,43 @@ gridSearch <- function(
   colnames(results) = c("loss", metrics, colnames(combinations))
   print(paste("Starting grid search with", nrow(combinations), "different models"))
 
+  # Check default parameters
+  default.params <- list(
+    num_layers = 2,
+    num_units = 200,
+    num_epochs = 10,
+    batch_size = 20,
+    dropout_rate = 0.25,
+    activation_fun = "relu",
+    loss_fun = "kullback_leibler_divergence",
+    learning_rate = 0.001
+  )
+  # Set default parameters if are not defined by user
+  defaults <- data.frame(default.params[setdiff(names(default.params), names(params))])
+  
+
   for (i in seq(nrow(combinations))){
     print(paste0("Training model ", i, "/", nrow(combinations)))
-    parameters <- combinations[i,]
+    
+    if (length(colnames(defaults)) > 0){
+      parameters <- cbind(combinations[i,], defaults)
+    }
+    else {
+      parameters <- combinations[i,]
+    }
+
+    if (ncol(combinations) == 1){
+      names(parameters)[match("combinations[i, ]", names(parameters))] <- names(combinations)
+    }
+
+    # print(parameters)
+
+    if (parameters$batch_size > subset * prop.test){
+      warning("Batch size is lower than sample size, skipping model")
+      results[i,] <- c(rep(NA, length(metrics) + 1), combinations[i,])
+      next
+    }
+
     model <- .trainDigitalDLSorterModel.gridSearch(
         object,
         subset = subset,
@@ -55,6 +89,7 @@ gridSearch <- function(
         activation.fun = parameters$activation_fun,
         dropout.rate = parameters$dropout_rate,
         loss = parameters$loss_fun,
+        learning.rate = parameters$learning_rate,
 
         metrics = metrics
     )
@@ -80,6 +115,7 @@ gridSearch <- function(
   activation.fun = "relu",
   dropout.rate = 0.25,
   loss = "kullback_leibler_divergence",
+  learning.rate = 0.001,
   metrics = metrics,
   scaling = "standarize",
   custom.model = NULL,
@@ -268,7 +304,7 @@ gridSearch <- function(
   # allow set optimizer?
   model %>% compile(
     loss = loss,
-    optimizer = optimizer_adam(),
+    optimizer = optimizer_adam(learning_rate = learning.rate),
     metrics = metrics
   )
   # pattern to set simulated and real cells
@@ -286,7 +322,13 @@ gridSearch <- function(
   }
   if (verbose) 
     message(paste("\n=== Training DNN with", n.train, "samples:\n"))
-  gen.train <- .trainGenerator(
+  # 
+  shuffling <- sample(seq(nrow(prob.matrix.train)))
+  prob.matrix.train <- prob.matrix.train[shuffling,]
+  val <- round(0.25 * nrow(prob.matrix.train))
+
+  # Added for validation
+  gen.val <- .trainGenerator(
     object = object, 
     funGen = .dataForDNN,
     prob.matrix = prob.matrix.train,
@@ -297,18 +339,47 @@ gridSearch <- function(
     combine = combine,
     shuffle = shuffle,
     pattern = pattern,
-    min.index = NULL,
-    max.index = NULL,
+    min.index = 1,
+    max.index = val,
     threads = threads,
     verbose = verbose
   )
+
+   gen.train <- .trainGenerator(
+    object = object, 
+    funGen = .dataForDNN,
+    prob.matrix = prob.matrix.train,
+    type.data = "train",
+    fun.pseudobulk = .pseudobulk.fun,
+    scaling = scaling.fun,
+    batch.size = batch.size,
+    combine = combine,
+    shuffle = shuffle,
+    pattern = pattern,
+    min.index = val+1,
+    max.index = nrow(prob.matrix.train),
+    threads = threads,
+    verbose = verbose
+  )
+
+  # history <- suppressWarnings(
+  #   model %>% fit_generator(
+  #     generator = gen.train,
+  #     steps_per_epoch = ceiling(n.train / batch.size),
+  #     epochs = num.epochs,
+  #     verbose = verbose.model,
+  #     view_metrics = view.plot
+  #   )
+
   history <- suppressWarnings(
     model %>% fit_generator(
       generator = gen.train,
-      steps_per_epoch = ceiling(n.train / batch.size),
+      validation_data = gen.val,
+      steps_per_epoch = ceiling((nrow(prob.matrix.train)-val)/ batch.size),
       epochs = num.epochs,
       verbose = verbose.model,
-      view_metrics = view.plot
+      view_metrics = view.plot,
+      validation_steps = ceiling(val/ batch.size)
     )
   )
   # }
