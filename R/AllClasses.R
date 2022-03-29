@@ -326,6 +326,7 @@ DigitalDLSorter <- setClass(
     single.cell.simul = "SingleCellExperimentOrNULL",
     prob.cell.types = "ListOrNULL",
     bulk.simul = "ListOrNULL",
+    grid.search = "ListOrNULL", # New
     trained.model = "DigitalDLSorterDNNOrNULL",
     deconv.data = "ListOrNULL",
     deconv.results = "ListOrNULL",
@@ -344,6 +345,7 @@ setMethod(
     single.cell.simul = NULL,
     prob.cell.types = NULL,
     bulk.simul = NULL,
+    grid.search = NULL,
     trained.model = NULL,
     deconv.data = NULL,
     deconv.results = NULL,
@@ -355,6 +357,7 @@ setMethod(
     .Object@single.cell.simul <- single.cell.simul
     .Object@prob.cell.types <- prob.cell.types
     .Object@bulk.simul <- bulk.simul
+    .Object@grid.search <- grid.search
     .Object@trained.model <- trained.model
     .Object@deconv.data <- deconv.data
     .Object@deconv.results <- deconv.results

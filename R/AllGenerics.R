@@ -856,6 +856,53 @@ setMethod(
   }
 )
 
+#' Get and set \code{grid.search} slot in a
+#'   \code{\linkS4class{DigitalDLSorter}} object
+#'
+#' @docType methods
+#' @name grid.search
+#' @rdname grid.search
+#' @aliases grid.search,DigitalDLSorter-method
+#' 
+#' @param object \code{\linkS4class{DigitalDLSorter}} object.
+#' @param type.data Element of the list. Can be \code{'train'}, \code{'test'} or
+#'   \code{'both'} (the last by default).
+#'
+#' @export grid.search
+#'  
+setGeneric(
+  name = "grid.search", 
+  def = function(object) standardGeneric("grid.search")
+)
+setMethod(
+  f = "grid.search",
+  signature = "DigitalDLSorter",
+  definition = function(object) object@grid.search
+)
+
+#' @docType methods
+#' @rdname grid.search
+#' @aliases grid.search<-,DigitalDLSorter-method
+#' 
+#' @param value List with two elements, train and test, each one being
+#'   a \code{\linkS4class{SummarizedExperiment}} object with simulated bulk
+#'   RNA-Seq samples.
+#'
+#' @export grid.search<-
+#'   
+setGeneric(
+  name = "grid.search<-", 
+  def = function(object, value) standardGeneric("grid.search<-")
+)
+setMethod(
+  f = "grid.search<-",
+  signature = "DigitalDLSorter",
+  definition = function(object, value) {
+    object@grid.search <- value
+    return(object)
+  }
+)
+
 # trained.model
 
 #' @title Get and set \code{trained.model} slot in a

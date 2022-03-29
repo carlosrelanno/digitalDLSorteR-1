@@ -1,3 +1,6 @@
+#' @importFrom utils write.csv
+NULL
+
 gridSearch <- function(
   object,
   params,
@@ -9,20 +12,23 @@ gridSearch <- function(
   models = 100,
   metrics = c("accuracy", "mean_absolute_error",
               "categorical_accuracy", "mean_absolute_percentage_error"),
-  location,
+  save.files = TRUE,
+  location = NULL,
   name
 ) {
-  if (is.null(location)) {
-    stop("'location' argument must be specified")
+  if (save.files){
+    if (is.null(location)) {
+      stop("'location' argument must be specified")
+    }
+    # Generate folders
+    main.folder <- paste0(location, "/", name)
+    if (file.exists(main.folder)){
+      print(paste0("A folder with the specified name already exists in the specified location. Creating folder ",
+        name, "_1"))
+      main.folder <- paste0(main.folder, "_1")
+    }
+    dir.create(main.folder)
   }
-  # Generate folders
-  main.folder <- paste0(location, "/", name)
-  if (file.exists(main.folder)){
-    print(paste0("A folder with the specified name already exists in the specified location. Creating folder ",
-      name, "_1"))
-    main.folder <- paste0(main.folder, "_1")
-  }
-  dir.create(main.folder)
 
   # Generate combination of parameter's dataframe
   combinations <- expand.grid(params)
@@ -33,11 +39,20 @@ gridSearch <- function(
   }
   
   # Generate results table
-  results <- data.frame(matrix(NA, ncol = length(colnames(combinations)) + length(metrics) + 1,
+  test.results <- data.frame(matrix(NA, ncol = length(colnames(combinations)) + length(metrics) + 1,
+    nrow = nrow(combinations)))
+
+  train.results <- data.frame(matrix(NA, ncol = length(colnames(combinations)) + 2*(length(metrics) + 1),
     nrow = nrow(combinations)))
   
-  colnames(results) = c("loss", metrics, colnames(combinations))
-  print(paste("Starting grid search with", nrow(combinations), "different models"))
+  metric.names <- c("loss", metrics)
+  colnames(test.results) <- c(metric.names, colnames(combinations))
+
+  colnames(train.results) <- c(metric.names, paste0("val_", metric.names), colnames(combinations))
+
+  if (verbose){
+    print(paste("Starting grid search with", nrow(combinations), "different models"))
+  }
 
   # Check default parameters
   default.params <- list(
@@ -55,8 +70,10 @@ gridSearch <- function(
   
 
   for (i in seq(nrow(combinations))){
-    print(paste0("Training model ", i, "/", nrow(combinations)))
-    
+    if (verbose){
+      print(paste0("Training model ", i, "/", nrow(combinations)))
+    }
+
     if (length(colnames(defaults)) > 0){
       parameters <- cbind(combinations[i,], defaults)
     }
@@ -72,7 +89,7 @@ gridSearch <- function(
 
     if (parameters$batch_size > subset * prop.test){
       warning("Batch size is lower than sample size, skipping model")
-      results[i,] <- c(rep(NA, length(metrics) + 1), combinations[i,])
+      test.results[i,] <- c(rep(NA, length(metrics) + 1), combinations[i,])
       next
     }
 
@@ -91,18 +108,31 @@ gridSearch <- function(
         loss = parameters$loss_fun,
         learning.rate = parameters$learning_rate,
 
-        metrics = metrics
+        metrics = metrics,
+        on.the.fly = on.the.fly
     )
 
-    model.folder <- paste0(main.folder, "/model_", as.character(i))
-    dir.create(model.folder)
-    sink(paste0(model.folder, "/samples.txt")); print(model$samples); sink()
-    write.csv(model$train_metrics$metrics, file = paste0(model.folder, "/train_metrics.csv"))
+    if (save.files){
+      model.folder <- paste0(main.folder, "/model_", as.character(i))
+      dir.create(model.folder)
+      sink(paste0(model.folder, "/samples.txt")); print(model$samples); sink()
+      write.csv(model$train_metrics$metrics, file = paste0(model.folder, "/train_metrics.csv"))
+    }
 
-    results[i,] <- c(model$test_metrics, combinations[i,])
-    print(results)
+    test.results[i,] <- c(model$test_metrics, combinations[i,])
+    # print(test.results)
+    
+    train.results[i,] <- c(tail(as.data.frame(model$train_metrics$metrics), 1), combinations[i,])
   }
-  write.csv(results, file = paste0(main.folder, "/grid_search_results.csv"))
+
+  if (save.files){
+    write.csv(test.results, file = paste0(main.folder, "/grid_search_test_results.csv"))
+    write.csv(train.results, file = paste0(main.folder, "/grid_search_train_results.csv"))
+  }  
+  grid.search(object) <- list(train.results = train.results, test.results = test.results)
+
+  if (verbose) message("DONE")
+  return(object)
 }
 
 .trainDigitalDLSorterModel.gridSearch <- function(
@@ -448,7 +478,6 @@ gridSearch <- function(
   if (verbose) message("DONE")
   # return(object)
 }
-
 
 .targetForDNNSubset <- function(
   object, 
