@@ -300,6 +300,8 @@ setClassUnion("DigitalDLSorterDNNOrNULL", c("DigitalDLSorterDNN", "NULL"))
 #'   Each entry is a \code{\linkS4class{SummarizedExperiment}} object. The count
 #'   matrices can be stored as \code{HDF5Array} files using HDF5 files as
 #'   back-end in case of RAM limitations.
+#' @slot grid.search A list containing the results of a grid search to optimize 
+#'   the model.
 #' @slot trained.model \code{\linkS4class{DigitalDLSorterDNN}} object with all
 #'   the information related to the trained model. See
 #'   \code{?\linkS4class{DigitalDLSorterDNN}} for more details.
@@ -326,7 +328,7 @@ DigitalDLSorter <- setClass(
     single.cell.simul = "SingleCellExperimentOrNULL",
     prob.cell.types = "ListOrNULL",
     bulk.simul = "ListOrNULL",
-    grid.search = "ListOrNULL", # New
+    grid.search = "ListOrNULL", # // TODO add definition
     trained.model = "DigitalDLSorterDNNOrNULL",
     deconv.data = "ListOrNULL",
     deconv.results = "ListOrNULL",
@@ -440,7 +442,7 @@ setMethod(
   else return(FALSE)
 }
 
-setMethod(
+setMethod( # // TODO add print of gridsearch 
   f = "show",
   signature = "DigitalDLSorter",
   definition = function(object) {

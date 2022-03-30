@@ -1,35 +1,50 @@
 #' @importFrom utils write.csv
+#' @importFrom ggplot2 ggplot aes geom_point geom_violin geom_boxplot geom_line geom_abline geom_text geom_hline geom_errorbar geom_bar theme ggtitle element_text xlab ylab scale_color_manual scale_fill_manual scale_x_continuous scale_y_continuous guides guide_legend facet_wrap stat_smooth annotate stat_density_2d element_blank
+#' @importFrom reshape2 melt
 NULL
 
 gridSearch <- function(
   object,
   params,
   combine = "bulk", ##
-  verbose = T, ##
-  on.the.fly = F, ##
+  verbose = TRUE, ##
+  on.the.fly = FALSE, ##
   subset = 2000,
   prop.test = 1/3,
   models = 100,
   metrics = c("accuracy", "mean_absolute_error",
-              "categorical_accuracy", "mean_absolute_percentage_error"),
+              "categorical_accuracy", "mean_absolute_percentage_error",
+              "kullback_leibler_divergence"),
   save.files = TRUE,
   location = NULL,
-  name
+  name = NULL
 ) {
+
+  if (is.null(params)){
+    stop("Some parameters must be specified as a list in the 'params' argument")
+  }
+
   if (save.files){
     if (is.null(location)) {
-      stop("'location' argument must be specified")
+      stop("'location' argument must be specified when saving the data from the models")
+    }
+    if (is.null(name)) {
+      stop("'name' argument must be specified when saving the data from the models")
     }
     # Generate folders
     main.folder <- paste0(location, "/", name)
     if (file.exists(main.folder)){
-      print(paste0("A folder with the specified name already exists in the specified location. Creating folder ",
+      message(paste0("A folder with the specified name already exists in the specified location. Creating folder ",
         name, "_1"))
       main.folder <- paste0(main.folder, "_1")
     }
     dir.create(main.folder)
   }
 
+  if (!on.the.fly & "pseudobulk_fun" %in% names(params)){
+    warning("The pseudobulk_fun parameter will be removed since there is not on the fly training")
+    params <- params[names(params) != "pseudobulk_fun"]
+  }
   # Generate combination of parameter's dataframe
   combinations <- expand.grid(params)
 
@@ -51,7 +66,7 @@ gridSearch <- function(
   colnames(train.results) <- c(metric.names, paste0("val_", metric.names), colnames(combinations))
 
   if (verbose){
-    print(paste("Starting grid search with", nrow(combinations), "different models"))
+    message(paste("Starting grid search with", nrow(combinations), "different models"))
   }
 
   # Check default parameters
@@ -63,7 +78,8 @@ gridSearch <- function(
     dropout_rate = 0.25,
     activation_fun = "relu",
     loss_fun = "kullback_leibler_divergence",
-    learning_rate = 0.001
+    learning_rate = 0.001,
+    pseudobulk_fun = "MeanCPM"
   )
   # Set default parameters if are not defined by user
   defaults <- data.frame(default.params[setdiff(names(default.params), names(params))])
@@ -71,7 +87,7 @@ gridSearch <- function(
 
   for (i in seq(nrow(combinations))){
     if (verbose){
-      print(paste0("Training model ", i, "/", nrow(combinations)))
+      message(paste0("Training model ", i, "/", nrow(combinations)))
     }
 
     if (length(colnames(defaults)) > 0){
@@ -85,7 +101,7 @@ gridSearch <- function(
       names(parameters)[match("combinations[i, ]", names(parameters))] <- names(combinations)
     }
 
-    # print(parameters)
+    # message(parameters)
 
     if (parameters$batch_size > subset * prop.test){
       warning("Batch size is lower than sample size, skipping model")
@@ -109,18 +125,20 @@ gridSearch <- function(
         learning.rate = parameters$learning_rate,
 
         metrics = metrics,
-        on.the.fly = on.the.fly
+        on.the.fly = on.the.fly,
+        pseudobulk.function = parameters$pseudobulk_fun
     )
 
     if (save.files){
       model.folder <- paste0(main.folder, "/model_", as.character(i))
       dir.create(model.folder)
-      sink(paste0(model.folder, "/samples.txt")); print(model$samples); sink()
+      sink(paste0(model.folder, "/samples.txt")); print(model$samples); sink() # // TODO - change this with paste...collapse..
       write.csv(model$train_metrics$metrics, file = paste0(model.folder, "/train_metrics.csv"))
     }
 
+    # // FIXME quiero el nombre de las funciones que usa en los resultados
     test.results[i,] <- c(model$test_metrics, combinations[i,])
-    # print(test.results)
+    # message(test.results)
     
     train.results[i,] <- c(tail(as.data.frame(model$train_metrics$metrics), 1), combinations[i,])
   }
@@ -129,7 +147,7 @@ gridSearch <- function(
     write.csv(test.results, file = paste0(main.folder, "/grid_search_test_results.csv"))
     write.csv(train.results, file = paste0(main.folder, "/grid_search_train_results.csv"))
   }  
-  grid.search(object) <- list(train.results = train.results, test.results = test.results)
+  grid.search(object) <- list(params = params, train.results = train.results, test.results = test.results)
 
   if (verbose) message("DONE")
   return(object)
@@ -581,4 +599,50 @@ gridSearch <- function(
   } else {
     return(probs.matrix)
   }
+}
+
+saveGridSearchRDS <- function(
+  object,
+  file
+) {
+  if (is.null(grid.search(object))){
+    stop("This object does not have grid search results data to save")
+  }
+  saveRDS(grid.search(object), file)
+}
+
+loadGridSearchRDS <- function(
+  object,
+  file
+) {
+  grid.search(object) <- readRDS(file)
+  return(object)
+}
+
+
+gridParamDist <- function(
+  object,
+  param,
+  ...
+) {
+  if (is.null(grid.search(object))){
+    stop("This object does not have grid search results data to analyze")
+  }
+  if (!(param %in% names(grid.search(object)$params))){
+    stop(paste0("This parameter is not available. Available ones are:\n", paste(names(grid.search(object)$params), collapse = " ")))
+  }
+  plot <- ggplot(grid.search(object)$test.results ,aes(x=factor(.data[[param]])))+ geom_bar(...) + xlab(param)
+  return(plot)
+}
+
+gridParamSDist <- function(
+  object,
+  ...
+) {
+  data <- grid.search(object)$test.results[names(grid.search(object)$params)]
+  data <- melt(data)
+  plot <- ggplot(data, aes(x=factor(value)))+ geom_bar() + facet_wrap(data$variable, scales = "free_x") + xlab("Value")
+  plot <- plot + ylab("Count") + ggtitle(paste("Distribution of parameters for", nrow(grid.search(object)$test.results), "models"))
+
+  return(plot)
 }
