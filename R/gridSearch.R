@@ -1,13 +1,14 @@
 #' @importFrom utils write.csv
-#' @importFrom ggplot2 ggplot aes geom_point geom_violin geom_boxplot geom_line geom_abline geom_text geom_hline geom_errorbar geom_bar theme ggtitle element_text xlab ylab scale_color_manual scale_fill_manual scale_x_continuous scale_y_continuous guides guide_legend facet_wrap stat_smooth annotate stat_density_2d element_blank
+#' @importFrom ggplot2 ggplot aes geom_point geom_violin geom_boxplot geom_histogram geom_line geom_abline geom_text geom_hline geom_errorbar geom_bar theme ggtitle element_text xlab ylab scale_color_manual scale_fill_manual scale_x_continuous scale_y_continuous guides guide_legend facet_wrap stat_smooth annotate stat_density_2d element_blank
 #' @importFrom reshape2 melt
+#' @importFrom ComplexHeatmap Heatmap draw HeatmapAnnotation
 NULL
 
 gridSearch <- function(
   object,
   params,
   combine = "bulk", ##
-  verbose = TRUE, ##
+  verbose = TRUE, # // TODO Preguntar si quiere ver las gráficas durante el
   on.the.fly = FALSE, ##
   subset = 2000,
   prop.test = 1/3,
@@ -136,7 +137,6 @@ gridSearch <- function(
       write.csv(model$train_metrics$metrics, file = paste0(model.folder, "/train_metrics.csv"))
     }
 
-    # // FIXME quiero el nombre de las funciones que usa en los resultados
     test.results[i,] <- c(model$test_metrics, combinations[i,])
     # message(test.results)
     
@@ -146,7 +146,17 @@ gridSearch <- function(
   if (save.files){
     write.csv(test.results, file = paste0(main.folder, "/grid_search_test_results.csv"))
     write.csv(train.results, file = paste0(main.folder, "/grid_search_train_results.csv"))
-  }  
+  }
+
+  # Get the name of the categorical parameters
+  string.params <- names(params)[unlist(lapply(params, is.character))] 
+  string.params <- string.params[string.params %in% colnames(test.results)]
+
+  for (p in string.params){
+    train.results[p] <- lapply(train.results[p], function(x) (params[[p]][x]))
+    test.results[p] <- lapply(test.results[p], function(x) (params[[p]][x]))
+  }
+
   grid.search(object) <- list(params = params, train.results = train.results, test.results = test.results)
 
   if (verbose) message("DONE")
@@ -619,7 +629,6 @@ loadGridSearchRDS <- function(
   return(object)
 }
 
-
 gridParamDist <- function(
   object,
   param,
@@ -632,6 +641,7 @@ gridParamDist <- function(
     stop(paste0("This parameter is not available. Available ones are:\n", paste(names(grid.search(object)$params), collapse = " ")))
   }
   plot <- ggplot(grid.search(object)$test.results ,aes(x=factor(.data[[param]])))+ geom_bar(...) + xlab(param)
+  plot <- plot + ylab("Count")
   return(plot)
 }
 
@@ -640,9 +650,96 @@ gridParamSDist <- function(
   ...
 ) {
   data <- grid.search(object)$test.results[names(grid.search(object)$params)]
-  data <- melt(data)
+  data <- reshape2::melt(data, id.vars=NULL)
   plot <- ggplot(data, aes(x=factor(value)))+ geom_bar() + facet_wrap(data$variable, scales = "free_x") + xlab("Value")
   plot <- plot + ylab("Count") + ggtitle(paste("Distribution of parameters for", nrow(grid.search(object)$test.results), "models"))
 
   return(plot)
+}
+
+gridMetricDist <- function(
+  object,
+  metric = "loss",
+  set = "test.results",
+  normalize = TRUE,
+  ...
+) {
+   if (is.null(grid.search(object))){
+    stop("This object does not have grid search results data to analyze")
+  }
+
+  metrics <- setdiff(colnames(grid.search(object)[[set]]), names(grid.search(object)$params))
+  if (!(metric %in% metrics)){
+    stop(paste0("This metric is not available. Available ones are:\n", paste(metrics, collapse = " ")))
+  }
+
+  if (normalize){
+    normdata = function (x) {return((x-min(x))/(max(x)-min(x)))}
+    metric.res <- as.data.frame(apply(grid.search(object)[[set]][,metrics],2,normdata))
+  }
+  else {metric.res <- grid.search(object)[[set]][,metrics]}
+
+  plot <- ggplot(metric.res ,aes(x=.data[[metric]]))+ geom_histogram() + xlab(metric)
+  plot <- plot + ylab("Count")
+  return(plot)
+}
+
+gridMetricSDist <- function(
+  object,
+  set = "test.results",
+  normalize = TRUE,
+  ...
+) {
+   if (is.null(grid.search(object))){
+    stop("This object does not have grid search results data to analyze")
+  }
+
+  metrics <- setdiff(colnames(grid.search(object)[[set]]), names(grid.search(object)$params))
+  
+  if (normalize){
+    normdata = function (x) {return((x-min(x))/(max(x)-min(x)))}
+    metric.res <- as.data.frame(apply(grid.search(object)[[set]][,metrics],2,normdata))
+  }
+  else {metric.res <- grid.search(object)[[set]][,metrics]}
+
+  metric.res <- reshape2::melt(metric.res, id.vars=NULL)
+
+  plot <- ggplot(metric.res, aes(x=value))+ ggplot2::geom_histogram() + facet_wrap(metric.res$variable, scales = "free_x") + xlab("Value")
+  plot <- plot + ylab("Count") + ggtitle(paste("Distribution of metrics for", nrow(grid.search(object)$test.results), "models"))
+  return(plot)
+}
+
+gridMap <- function(
+  # // TODO Cambiar colores, coloracón por ranking de modelos, añadir numeros de metricas
+  object,
+  sort.metric = "loss",
+  cut.off = 20
+) {
+  metrics <- setdiff(colnames(grid.search(object)$test.results), names(grid.search(object)$params))
+  normdata = function (x) {return((x-min(x))/(max(x)-min(x)))}
+  metric.res <- as.data.frame(apply(grid.search(object)$test.results[,metrics],2,normdata))
+
+  models <- order(grid.search(object)$test.results[,sort.metric])[1:cut.off]
+  paramsAnnotDf <- as.data.frame(apply(grid.search(object)$test.results[,names(grid.search(object)$params)],2,function (x) {return(factor(x))}))
+  a = ComplexHeatmap::HeatmapAnnotation(df = paramsAnnotDf[models,], which = "row")
+
+  string.params <- names(grid.search(object)$params)[unlist(lapply(grid.search(object)$params, is.character))] 
+  paramsDF <- grid.search(object)$test.results[models, names(grid.search(object)$params)]
+
+  for (p in string.params) {paramsDF[,p] <- factor(paramsDF[,p])}
+
+  hm <- ComplexHeatmap::Heatmap(
+    as.matrix(metric.res[models,]),
+    cluster_rows = hclust(cluster::daisy(paramsDF, metric="gower")),
+    show_row_names = T) + a
+  ComplexHeatmap::draw(hm)
+}
+
+bestModels <- function(
+  object,
+  metric = "loss",
+  n.models = 5
+) {
+    models <- grid.search(object)$test.results[order(grid.search(object)$test.results[,metric])][1:n.models,]
+    return(models)
 }
