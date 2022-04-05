@@ -308,35 +308,44 @@ trainDigitalDLSorterModel <- function(
            "num.units (number of neurons per layer)")
     }
     # check if any argument not provided
-    model <- keras_model_sequential(name = "DigitalDLSorter")
-    # arbitrary number of hidden layers and neurons
-    for (i in seq(num.hidden.layers)) {
-      if (i == 1) {
-        model <- model %>% layer_dense(
-          units = num.units[i], 
-          input_shape = nrow(single.cell.real(object)),
-          name = paste0("Dense", i)
-        )
-      } else {
-        model <- model %>% layer_dense(
-          units = num.units[i], 
-          name = paste0("Dense", i)
-        )
-      }
-      model <- model %>% 
-        layer_batch_normalization(name = paste0("BatchNormalization", i)) %>%
-        layer_activation(activation = activation.fun, 
-                         name = paste0("ActivationReLu", i)) %>%
-        layer_dropout(rate = dropout.rate, name = paste0("Dropout", i))
-    }
+    model <- .buildModel(
+      object,
+      num.hidden.layers = num.hidden.layers,
+      num.units = num.units,
+      activation.fun = activation.fun,
+      dropout.rate = dropout.rate
+    )
+    
+    # <- keras_model_sequential(name = "DigitalDLSorter")
+    # # arbitrary number of hidden layers and neurons
+    # for (i in seq(num.hidden.layers)) {
+    #   if (i == 1) {
+    #     model <- model %>% layer_dense(
+    #       units = num.units[i], 
+    #       input_shape = nrow(single.cell.real(object)),
+    #       name = paste0("Dense", i)
+    #     )
+    #   } else {
+    #     model <- model %>% layer_dense(
+    #       units = num.units[i], 
+    #       name = paste0("Dense", i)
+    #     )
+    #   }
+    #   model <- model %>% 
+    #     layer_batch_normalization(name = paste0("BatchNormalization", i)) %>%
+    #     layer_activation(activation = activation.fun, 
+    #                      name = paste0("ActivationReLu", i)) %>%
+    #     layer_dropout(rate = dropout.rate, name = paste0("Dropout", i))
+    # }
     # final layer --> compression and proportions
-    model <- model %>% layer_dense(
-      units = ncol(prob.cell.types(object, "train") %>% prob.matrix()),
-      name = paste0("Dense", i + 1)
-    ) %>% layer_batch_normalization(
-      name = paste0("BatchNormalization", i + 1)
-    ) %>% layer_activation(activation = "softmax", name = "ActivationSoftmax")
-  } else {
+    # model <- model %>% layer_dense(
+    #   units = ncol(prob.cell.types(object, "train") %>% prob.matrix()),
+    #   name = paste0("Dense", i + 1)
+    # ) %>% layer_batch_normalization(
+    #   name = paste0("BatchNormalization", i + 1)
+    # ) %>% layer_activation(activation = "softmax", name = "ActivationSoftmax")
+  } 
+  else {
     # consider more situations where the function fails
     if (!is(custom.model, "keras.engine.sequential.Sequential")) {
       stop("'custom.model' must be a keras.engine.sequential.Sequential object")
@@ -380,7 +389,14 @@ trainDigitalDLSorterModel <- function(
   }
   if (verbose) 
     message(paste("\n=== Training DNN with", n.train, "samples:\n"))
-  gen.train <- .trainGenerator(
+
+
+  shuffling <- sample(seq(nrow(prob.matrix.train)))
+  prob.matrix.train <- prob.matrix.train[shuffling,]
+  val <- round(0.25 * nrow(prob.matrix.train)) # // TODO make this customizable?
+
+  # Added for validation
+  gen.val <- .trainGenerator(
     object = object, 
     funGen = .dataForDNN,
     prob.matrix = prob.matrix.train,
@@ -391,19 +407,65 @@ trainDigitalDLSorterModel <- function(
     combine = combine,
     shuffle = shuffle,
     pattern = pattern,
-    min.index = NULL,
-    max.index = NULL,
+    min.index = 1,
+    max.index = val,
     threads = threads,
     verbose = verbose
   )
-  history <- model %>% fit_generator(
+
+   gen.train <- .trainGenerator(
+    object = object, 
+    funGen = .dataForDNN,
+    prob.matrix = prob.matrix.train,
+    type.data = "train",
+    fun.pseudobulk = .pseudobulk.fun,
+    scaling = scaling.fun,
+    batch.size = batch.size,
+    combine = combine,
+    shuffle = shuffle,
+    pattern = pattern,
+    min.index = val+1,
+    max.index = nrow(prob.matrix.train),
+    threads = threads,
+    verbose = verbose
+  )
+  
+
+  # gen.train <- .trainGenerator(
+  #   object = object, 
+  #   funGen = .dataForDNN,
+  #   prob.matrix = prob.matrix.train,
+  #   type.data = "train",
+  #   fun.pseudobulk = .pseudobulk.fun,
+  #   scaling = scaling.fun,
+  #   batch.size = batch.size,
+  #   combine = combine,
+  #   shuffle = shuffle,
+  #   pattern = pattern,
+  #   min.index = NULL,
+  #   max.index = NULL,
+  #   threads = threads,
+  #   verbose = verbose
+  # )
+  # history <- model %>% fit_generator(
+  #   generator = gen.train,
+  #   steps_per_epoch = ceiling(n.train / batch.size),
+  #   epochs = num.epochs,
+  #   verbose = verbose.model,
+  #   view_metrics = view.plot
+  # )
+
+  history <- suppressWarnings(
+  model %>% fit_generator(
     generator = gen.train,
-    steps_per_epoch = ceiling(n.train / batch.size),
+    validation_data = gen.val,
+    steps_per_epoch = ceiling((nrow(prob.matrix.train)-val)/ batch.size),
     epochs = num.epochs,
     verbose = verbose.model,
-    view_metrics = view.plot
-  )
-  # }
+    view_metrics = view.plot,
+    validation_steps = ceiling(val/ batch.size)
+  ))
+  
   if (verbose)
     message(paste0("\n=== Evaluating DNN in test data (", n.test, " samples)"))
 
@@ -1435,4 +1497,52 @@ rescale.function <- function(x) {
   weights <- get_weights(model.comp)
   model(object) <- list(model.json, weights)
   return(object)
+}
+
+.buildModel <- function(
+    object,
+    num.hidden.layers,
+    num.units,
+    activation.fun,
+    dropout.rate,
+    loss,
+    metrics,
+    compile = FALSE
+) {
+    model <- keras_model_sequential(name = "DigitalDLSorter")
+    # arbitrary number of hidden layers and neurons
+    for (i in seq(num.hidden.layers)) {
+      if (i == 1) {
+        model <- model %>% layer_dense(
+          units = num.units[i], 
+          input_shape = nrow(single.cell.real(object)),
+          name = paste0("Dense", i)
+        )
+      } else {
+        model <- model %>% layer_dense(
+          units = num.units[i], 
+          name = paste0("Dense", i)
+        )
+      }
+      model <- model %>% 
+        layer_batch_normalization(name = paste0("BatchNormalization", i)) %>%
+        layer_activation(activation = activation.fun, 
+                         name = paste0("ActivationReLu", i)) %>%
+        layer_dropout(rate = dropout.rate, name = paste0("Dropout", i))
+    }
+    # final layer --> compression and proportions
+    model <- model %>% layer_dense(
+      units = ncol(prob.cell.types(object, "train") %>% prob.matrix()),
+      name = paste0("Dense", i + 1)
+    ) %>% layer_batch_normalization(
+      name = paste0("BatchNormalization", i + 1)
+    ) %>% layer_activation(activation = "softmax", name = "ActivationSoftmax")
+
+    if (compile){
+        model %>% compile(
+        loss = loss,
+        optimizer = optimizer_adam(),
+        metrics = metrics)
+    }
+    return(model)
 }

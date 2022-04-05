@@ -16,9 +16,11 @@ gridSearch <- function(
   metrics = c("accuracy", "mean_absolute_error",
               "categorical_accuracy", "mean_absolute_percentage_error",
               "kullback_leibler_divergence"),
-  save.files = TRUE,
+  save.files = FALSE,
   location = NULL,
-  name = NULL
+  name = NULL,
+  backup.file = "",
+  backup.each = 10
 ) {
 
   if (is.null(params)){
@@ -141,6 +143,10 @@ gridSearch <- function(
     # message(test.results)
     
     train.results[i,] <- c(tail(as.data.frame(model$train_metrics$metrics), 1), combinations[i,])
+
+    if (backup.file != "" & i%%backup.each == 0){
+      saveRDS(list(params = params, train.results = na.omit(train.results), test.results = na.omit(test.results)), backup.file)
+    }
   }
 
   if (save.files){
@@ -308,34 +314,14 @@ gridSearch <- function(
            "num.units (number of neurons per layer)")
     }
     # check if any argument not provided
-    model <- keras_model_sequential(name = "DigitalDLSorter")
-    # arbitrary number of hidden layers and neurons
-    for (i in seq(num.hidden.layers)) {
-      if (i == 1) {
-        model <- model %>% layer_dense(
-          units = num.units[i], 
-          input_shape = nrow(single.cell.real(object)),
-          name = paste0("Dense", i)
-        )
-      } else {
-        model <- model %>% layer_dense(
-          units = num.units[i], 
-          name = paste0("Dense", i)
-        )
-      }
-      model <- model %>% 
-        layer_batch_normalization(name = paste0("BatchNormalization", i)) %>%
-        layer_activation(activation = activation.fun, 
-                         name = paste0("ActivationReLu", i)) %>%
-        layer_dropout(rate = dropout.rate, name = paste0("Dropout", i))
-    }
-    # final layer --> compression and proportions
-    model <- model %>% layer_dense(
-      units = ncol(prob.cell.types(object, "train") %>% prob.matrix()),
-      name = paste0("Dense", i + 1)
-    ) %>% layer_batch_normalization(
-      name = paste0("BatchNormalization", i + 1)
-    ) %>% layer_activation(activation = "softmax", name = "ActivationSoftmax")
+    model <- .buildModel(
+      object,
+      num.hidden.layers = num.hidden.layers,
+      num.units = num.units,
+      activation.fun = activation.fun,
+      dropout.rate = dropout.rate
+    )
+    
   } else {
     # consider more situations where the function fails
     if (!is(custom.model, "keras.engine.sequential.Sequential")) {
@@ -674,8 +660,7 @@ gridMetricDist <- function(
   }
 
   if (normalize){
-    normdata = function (x) {return((x-min(x))/(max(x)-min(x)))}
-    metric.res <- as.data.frame(apply(grid.search(object)[[set]][,metrics],2,normdata))
+    metric.res <- as.data.frame(apply(grid.search(object)[[set]][,metrics],2,.normdata2))
   }
   else {metric.res <- grid.search(object)[[set]][,metrics]}
 
@@ -697,8 +682,7 @@ gridMetricSDist <- function(
   metrics <- setdiff(colnames(grid.search(object)[[set]]), names(grid.search(object)$params))
   
   if (normalize){
-    normdata = function (x) {return((x-min(x))/(max(x)-min(x)))}
-    metric.res <- as.data.frame(apply(grid.search(object)[[set]][,metrics],2,normdata))
+    metric.res <- as.data.frame(apply(grid.search(object)[[set]][,metrics],2,.normdata2))
   }
   else {metric.res <- grid.search(object)[[set]][,metrics]}
 
@@ -713,13 +697,12 @@ gridMap <- function(
   # // TODO Cambiar colores, coloracón por ranking de modelos, añadir numeros de metricas
   object,
   sort.metric = "loss",
-  cut.off = 20
+  n.models = 20
 ) {
   metrics <- setdiff(colnames(grid.search(object)$test.results), names(grid.search(object)$params))
-  normdata = function (x) {return((x-min(x))/(max(x)-min(x)))}
-  metric.res <- as.data.frame(apply(grid.search(object)$test.results[,metrics],2,normdata))
+  metric.res <- as.data.frame(apply(grid.search(object)$test.results[,metrics],2,.normdata2))
 
-  models <- order(grid.search(object)$test.results[,sort.metric])[1:cut.off]
+  models <- order(grid.search(object)$test.results[,sort.metric])[1:n.models]
   paramsAnnotDf <- as.data.frame(apply(grid.search(object)$test.results[,names(grid.search(object)$params)],2,function (x) {return(factor(x))}))
   a = ComplexHeatmap::HeatmapAnnotation(df = paramsAnnotDf[models,], which = "row")
 
@@ -738,8 +721,48 @@ gridMap <- function(
 bestModels <- function(
   object,
   metric = "loss",
+  decreasing = FALSE,
   n.models = 5
 ) {
-    models <- grid.search(object)$test.results[order(grid.search(object)$test.results[,metric])][1:n.models,]
+    models <- grid.search(object)$test.results[order(grid.search(object)$test.results[,metric], decreasing = decreasing),][1:n.models,]
     return(models)
+}
+
+gridCorr <- function(
+  object
+) {
+  parameters <- grid.search(object)$test.results[names(grid.search(object)$params)] %>% mutate_all(as.factor)
+  metrics <- setdiff(colnames(grid.search(object)$test.results), names(grid.search(object)$params))
+  metrics <- metrics[metrics != "loss"]
+  metric.res <- as.data.frame(apply(grid.search(object)$test.results[,metrics], 2, .normdata2))
+  selected <- apply(parameters, 2, function (x) (var(x) != 0 & !is.na(var(x))))
+  parameters <- parameters[,selected]
+
+  data <- cbind(metric.res, parameters)
+  maeCorr <- hetcor(data)
+  hm <- Heatmap(maeCorr$correlations,cluster_rows = F,cluster_columns = F)
+  return(hm)
+}
+
+boxplotGrid <- function(
+  object,
+  param,
+  metric,
+  jitter_by = NULL,
+  facet_by = NULL
+) {
+  if (!is.null(jitter_by)){
+    jitter <- geom_jitter(size=0.5, aes(color=factor(.data[[jitter_by]])))
+  }
+  else {jitter = NULL}
+
+  plot <- ggplot(grid.search(object)$test,aes(x=factor(.data[[param]]),y=.data[[metric]])) +
+  geom_boxplot() + jitter
+  return(plot)
+}
+
+.normdata2 <- function(
+  x
+) {
+  return((x-min(x))/(max(x)-min(x)))
 }
