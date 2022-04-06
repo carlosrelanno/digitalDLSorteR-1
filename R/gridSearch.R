@@ -752,12 +752,22 @@ boxplotGrid <- function(
   facet_by = NULL
 ) {
   if (!is.null(jitter_by)){
-    jitter <- geom_jitter(size=0.5, aes(color=factor(.data[[jitter_by]])))
+    jitter <- ggplot2::geom_jitter(size=2, aes(color=factor(.data[[jitter_by]]))) 
   }
   else {jitter = NULL}
 
-  plot <- ggplot(grid.search(object)$test,aes(x=factor(.data[[param]]),y=.data[[metric]])) +
-  geom_boxplot() + jitter
+  if (!is.null(facet_by)){
+    facet <- ggplot2::facet_grid(grid.search(object)$test[[facet_by]])
+  }
+  else {facet = NULL}
+
+  plot <- ggplot(
+    grid.search(object)$test,aes(x=factor(.data[[param]]),y=.data[[metric]])) +
+    geom_boxplot() + 
+    xlab(param) + 
+    jitter + 
+    facet + 
+    ggplot2::labs(color= jitter_by, title=paste(stringr::str_to_title(metric), "by parameters"))
   return(plot)
 }
 
