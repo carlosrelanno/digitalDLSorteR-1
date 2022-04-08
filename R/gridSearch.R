@@ -696,10 +696,11 @@ gridMetricSDist <- function(
 gridMap <- function(
   # // TODO Cambiar colores, coloracón por ranking de modelos, añadir numeros de metricas
   object,
-  sort.metric = "loss",
+  sort.metric = "kullback_leibler_divergence",
   n.models = 20
 ) {
   metrics <- setdiff(colnames(grid.search(object)$test.results), names(grid.search(object)$params))
+  metrics <- metrics[metrics != "loss"]
   metric.res <- as.data.frame(apply(grid.search(object)$test.results[,metrics],2,.normdata2))
 
   models <- order(grid.search(object)$test.results[,sort.metric])[1:n.models]
@@ -731,7 +732,7 @@ bestModels <- function(
 gridCorr <- function(
   object
 ) {
-  parameters <- grid.search(object)$test.results[names(grid.search(object)$params)] %>% mutate_all(as.factor)
+  parameters <- grid.search(object)$test.results[names(grid.search(object)$params)] %>% dplyr::mutate_all(as.factor)
   metrics <- setdiff(colnames(grid.search(object)$test.results), names(grid.search(object)$params))
   metrics <- metrics[metrics != "loss"]
   metric.res <- as.data.frame(apply(grid.search(object)$test.results[,metrics], 2, .normdata2))
@@ -739,17 +740,19 @@ gridCorr <- function(
   parameters <- parameters[,selected]
 
   data <- cbind(metric.res, parameters)
-  maeCorr <- hetcor(data)
-  hm <- Heatmap(maeCorr$correlations,cluster_rows = F,cluster_columns = F)
+  maeCorr <- polycor::hetcor(data)
+  hm <- ComplexHeatmap::Heatmap(maeCorr$correlations,cluster_rows = F,cluster_columns = F)
   return(hm)
 }
 
 boxplotGrid <- function(
   object,
   param,
-  metric,
+  metric = "loss",
   jitter_by = NULL,
-  facet_by = NULL
+  facet_by = NULL,
+  title = NULL,
+  quantile.cut = 0.95
 ) {
   if (!is.null(jitter_by)){
     jitter <- ggplot2::geom_jitter(size=2, aes(color=factor(.data[[jitter_by]]))) 
@@ -757,22 +760,72 @@ boxplotGrid <- function(
   else {jitter = NULL}
 
   if (!is.null(facet_by)){
-    facet <- ggplot2::facet_grid(grid.search(object)$test[[facet_by]])
+    facet <- ggplot2::facet_grid(grid.search(object)$test.results[[facet_by]])
   }
   else {facet = NULL}
 
+  if (is.null(title)){
+    title <- paste(stringr::str_to_title(metric), "by parameter")
+  }
+
   plot <- ggplot(
-    grid.search(object)$test,aes(x=factor(.data[[param]]),y=.data[[metric]])) +
-    geom_boxplot() + 
+    grid.search(object)$test.results,aes(x=factor(.data[[param]]),y=.data[[metric]])) +
+    geom_boxplot(outlier.shape = NA) + 
     xlab(param) + 
     jitter + 
     facet + 
-    ggplot2::labs(color= jitter_by, title=paste(stringr::str_to_title(metric), "by parameters"))
+    ggplot2::labs(color= jitter_by, title=title) +
+    ggplot2::coord_cartesian(y = c(0, quantile(grid.search(object)$test.results[,metric], quantile.cut)))
   return(plot)
+}
+
+paramsBoxplot <- function(
+  object,
+  metric = "loss",
+  quantile.cut = 0.95
+) {
+  plots <- lapply(params(object), function (p) (boxplotGrid(ddls, metric = metric, param = p, title = as.character(p), quantile.cut = quantile.cut)))
+  return(gridExtra::grid.arrange(grobs=plots)) 
+    #top=grid::textGrob(stringr::str_to_title(metric), gp=gpar(fontsize=18))))
 }
 
 .normdata2 <- function(
   x
 ) {
   return((x-min(x))/(max(x)-min(x)))
+}
+
+params <- function(
+  object
+) {
+  return(names(grid.search(object)$params))
+}
+
+metrics <- function(
+  object
+) {
+  metrics <- setdiff(colnames(grid.search(object)$test.results), names(grid.search(object)$params))
+  return(metrics)
+  }
+
+append.grid <- function(
+  object,
+  grid.search.list
+) {
+  if (!all(unlist(grid.search(object)$params) == unlist(grid.search.list$params))){
+    stop("The paremeters of these experiments are not the same")
+  }
+
+  if (!all(colnames(grid.search(object)$train.results) == colnames(grid.search.list$train.results))){
+    stop("The columns in the train set do not match")
+  }
+
+  if (!all(colnames(grid.search(object)$test.results) == colnames(grid.search.list$test.results))){
+    stop("The columns in the test set do not match")
+  }
+  # Train
+  grid.search(object)$train.results <- rbind(grid.search(object)$train.results, grid.search.list$train.results)
+  # Test
+  grid.search(object)$test.results <- rbind(grid.search(object)$test.results, grid.search.list$test.results)
+  return(object)
 }

@@ -409,6 +409,10 @@ setMethod(
   cat(n.bulk, "bulk profiles and", n.sc, "single-cell profiles\n")
 }
 
+.gridSearchShow <- function(gs) {
+  cat("   ", nrow(gs$test.results),"models from combinations of", length(names(gs$params)), "different parameters\n")
+}
+
 .zinbModelShow <- function(zinb.model) {
   cat(
     paste0(
@@ -431,7 +435,7 @@ setMethod(
 .allSlotsNull <- function(object) {
   list.slots <- list(
     "single.cell.real", "zinb.params", "single.cell.simul", "prob.cell.types",
-    "bulk.simul", "trained.model", "deconv.data", "deconv.results"
+    "bulk.simul", "grid.search", "trained.model", "deconv.data", "deconv.results"
   )
   res <- all(
     unlist(
@@ -487,6 +491,11 @@ setMethod( # // TODO add print of gridsearch
         }
       )
     }
+    if (!is.null(object@grid.search)) {
+      cat("Model optimization results:\n")
+      .gridSearchShow(object@grid.search)
+    }
+
     if (!is.null(object@trained.model)) {
       cat(show(object@trained.model), "\n")
     }
