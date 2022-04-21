@@ -48,7 +48,7 @@ Suggests:
     HDF5Array,
     testthat
 SystemRequirements: Python (>= 2.7.0), TensorFlow (https://www.tensorflow.org/)
-RoxygenNote: 7.1.1
+RoxygenNote: 7.1.2
 Roxygen: list(markdown = TRUE)
 Collate: 
     'AllClasses.R'
@@ -56,9 +56,9 @@ Collate:
     'digitalDLSorteR.R'
     'dnnModel.R'
     'evalMetrics.R'
+    'gridSearch.R'
     'loadData.R'
     'simBulk.R'
     'simSingleCell.R'
-    'gridSearch.R'
     'utils.R'
 VignetteBuilder: knitr

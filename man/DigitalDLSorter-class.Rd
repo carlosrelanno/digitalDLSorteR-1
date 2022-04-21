@@ -68,6 +68,9 @@ Each entry is a \code{\linkS4class{SummarizedExperiment}} object. The count
 matrices can be stored as \code{HDF5Array} files using HDF5 files as
 back-end in case of RAM limitations.}
 
+\item{\code{grid.search}}{A list containing the results of a grid search to optimize
+the model.}
+
 \item{\code{trained.model}}{\code{\linkS4class{DigitalDLSorterDNN}} object with all
 the information related to the trained model. See
 \code{?\linkS4class{DigitalDLSorterDNN}} for more details.}

@@ -115,7 +115,7 @@ the structure of this class, see \code{?\linkS4class{DigitalDLSorterDNN}}.
 \description{
 Train a Deep Neural Network model using the training data from
 \code{\linkS4class{DigitalDLSorter}} object. In addition, the trained model
-is evaluated with test data and prediction results are otained to determine
+is evaluated with test data and prediction results are obtained to determine
 its performance (see \code{?\link{calculateEvalMetrics}}). Training and
 evaluation can be performed using simulated profiles stored in the
 \code{\linkS4class{DigitalDLSorter}} object or 'on the fly' by simulating the

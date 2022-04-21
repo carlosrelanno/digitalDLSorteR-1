@@ -4,14 +4,69 @@
 #' @importFrom ComplexHeatmap Heatmap draw HeatmapAnnotation
 NULL
 
-gridSearch <- function(
+################################################################################
+####################### Grid search using the DNN model ########################
+################################################################################
+
+#' Perform a grid search hyper parameter tuning of the DNN model
+#'
+#' Perform a grid search using a list of parameters to optimize a given metric,
+#' using a \code{\linkS4class{DigitalDLSorter}} object. The results are stored
+#' in the \code{grid.search} slot of the object. In addition, back ups can be
+#' stored on the fly using the \code{backup.file} argument.
+#'
+#' The \code{\linkS4class{DigitalDLSorter}} object must contain previously
+#' simulated pseudobulks in the \code{bulk.simul} slot.
+#'
+#' @param object  \code{\linkS4class{DigitalDLSorter}} object with
+#'   \code{bulk.simul} slot.
+#' @param params  A named list with different parameters as elements and vectors
+#'   of values for each parameter.
+#' @param combine Type of profiles to be used for training. Can be
+#'   \code{'both'}, \code{'single-cell'} or \code{'bulk'} (\code{'bulk'} by
+#'   default). For test data, both types of profiles will be used.
+#' @param verbose Boolean indicating whether to display model progression during
+#'   training and model architecture information (\code{TRUE} by default).
+#' @param on.the.fly  Boolean indicating whether data will be generated 'on the
+#'   fly' during training (\code{FALSE} by default).
+#' @param subset  Integer indicating how many pseudobulks will be used for the
+#'   training and test of each model (2000 by default).
+#' @param prop.test Proportion of the pseudobulks (\code{subset} parameter) that
+#'   will be used for testing each model (1/3 by default).
+#' @param prop.val Proportion of the training set (1 - prop.test) that will be
+#'   used as validation set during training (1/4 by default).
+#' @param models Number of models to be generated. If it is greater than the
+#'   number of possible parameter combinations, or set to \code{all}, all
+#'   possible models will be tested.
+#' @param metrics Vector of metrics used to assess model performance during
+#'   training and evaluation (\code{c("accuracy",
+#'   "mean_absolute_error","categorical_accuracy","kullback_leibler_divergence")}
+#'    by default). See the
+#'   \href{https://keras.rstudio.com/reference/metric_binary_accuracy.html}{keras
+#'    documentation} to know available performance metrics.
+#' @param save.files  Boolean indicating if the training history and used
+#'   samples for each model are going to be stored in a folder. If \code{TRUE},
+#'   the \code{location} and \code{name} arguments must be provided too.
+#' @param location  String indicating the location path for the trained models
+#'   data, if \code{save.files = TRUE}.
+#' @param name  String indicating the name of the project to create a folder if
+#'   \code{save.files = TRUE}.
+#' @param backup.file  String indicating the name and path of the file to save
+#'   the results of the grid search each n models (indicated in
+#'   \code{backup.each} parameter). If not specified,no backup will be created.
+#'   This is recommended since the process can take a long time.
+#' @param backup.each Integer indicating every how many models the backup file
+#'   should be updated. (10 by default).
+gridSearch <- function( 
   object,
   params,
-  combine = "bulk", ##
-  verbose = TRUE, # // TODO Preguntar si quiere ver las gráficas durante el
-  on.the.fly = FALSE, ##
+  combine = "bulk",
+  verbose = TRUE,
+  view.metrics.plot = TRUE, 
+  on.the.fly = FALSE, 
   subset = 2000,
   prop.test = 1/3,
+  prop.val = 1/4,
   models = 100,
   metrics = c("accuracy", "mean_absolute_error",
               "categorical_accuracy", "mean_absolute_percentage_error",
@@ -116,6 +171,7 @@ gridSearch <- function(
         object,
         subset = subset,
         prop.test = prop.test,
+        prop.val = prop.val,
 
         # Parameters
         batch.size = parameters$batch_size,
@@ -129,7 +185,8 @@ gridSearch <- function(
 
         metrics = metrics,
         on.the.fly = on.the.fly,
-        pseudobulk.function = parameters$pseudobulk_fun
+        pseudobulk.function = parameters$pseudobulk_fun,
+        view.metrics.plot = view.metrics.plot
     )
 
     if (save.files){
@@ -182,6 +239,7 @@ gridSearch <- function(
   learning.rate = 0.001,
   metrics = metrics,
   scaling = "standarize",
+  prop.val = 0.25,
   custom.model = NULL,
   shuffle = FALSE,
   on.the.fly = FALSE,
@@ -369,7 +427,7 @@ gridSearch <- function(
   # 
   shuffling <- sample(seq(nrow(prob.matrix.train)))
   prob.matrix.train <- prob.matrix.train[shuffling,]
-  val <- round(0.25 * nrow(prob.matrix.train))
+  val <- round(prop.val * nrow(prob.matrix.train))
 
   # Added for validation
   gen.val <- .trainGenerator(
@@ -597,6 +655,14 @@ gridSearch <- function(
   }
 }
 
+
+#' Save the grid.search slot in a RDS file
+#'
+#' Write a RDS file containing the \code{grid.search} slot of a
+#' \code{\linkS4class{DigitalDLSorter}} object.
+#' @param object \code{\linkS4class{DigitalDLSorter}} object with
+#'   \code{grid.search} slot.
+#' @param file A string indicating the path and file name to store the data.
 saveGridSearchRDS <- function(
   object,
   file
@@ -607,6 +673,13 @@ saveGridSearchRDS <- function(
   saveRDS(grid.search(object), file)
 }
 
+
+#' Load the grid.search slot from a RDS file
+#'
+#' Load a RDS file containing the \code{grid.search} slot of a
+#' \code{\linkS4class{DigitalDLSorter}} object.
+#' @param object \code{\linkS4class{DigitalDLSorter}}
+#' @param file A string indicating the path and file name to load the data from.
 loadGridSearchRDS <- function(
   object,
   file
@@ -615,6 +688,16 @@ loadGridSearchRDS <- function(
   return(object)
 }
 
+
+#' Histogram of the distribution of a given parameter
+#'
+#' Display the distribution of a given parameter between all generated models.
+#'
+#' @param object \code{\linkS4class{DigitalDLSorter}} object with
+#'   \code{grid.search} slot.
+#' @param param The parameter to plot. The available parameters can be known
+#'   using \code{params()}
+#' @param ... 
 gridParamDist <- function(
   object,
   param,
@@ -631,14 +714,23 @@ gridParamDist <- function(
   return(plot)
 }
 
+#' Histograms of the distribution of parameters
+#'
+#' Display the distribution of all parameters between all generated models.
+#'
+#' @param object \code{\linkS4class{DigitalDLSorter}} object with
+#'   \code{grid.search} slot.
+#' @param ... 
 gridParamSDist <- function(
   object,
+  theme = NULL,
   ...
 ) {
   data <- grid.search(object)$test.results[names(grid.search(object)$params)]
   data <- reshape2::melt(data, id.vars=NULL)
   plot <- ggplot(data, aes(x=factor(value)))+ geom_bar() + facet_wrap(data$variable, scales = "free_x") + xlab("Value")
   plot <- plot + ylab("Count") + ggtitle(paste("Distribution of parameters for", nrow(grid.search(object)$test.results), "models"))
+  plot <- plot + DigitalDLSorterTheme() + theme
 
   return(plot)
 }
@@ -648,6 +740,7 @@ gridMetricDist <- function(
   metric = "loss",
   set = "test.results",
   normalize = TRUE,
+  theme = NULL,
   ...
 ) {
    if (is.null(grid.search(object))){
@@ -666,6 +759,7 @@ gridMetricDist <- function(
 
   plot <- ggplot(metric.res ,aes(x=.data[[metric]]))+ geom_histogram() + xlab(metric)
   plot <- plot + ylab("Count")
+  plot <- plot + DigitalDLSorterTheme() + theme
   return(plot)
 }
 
@@ -673,6 +767,7 @@ gridMetricSDist <- function(
   object,
   set = "test.results",
   normalize = TRUE,
+  theme = NULL,
   ...
 ) {
    if (is.null(grid.search(object))){
@@ -690,6 +785,7 @@ gridMetricSDist <- function(
 
   plot <- ggplot(metric.res, aes(x=value))+ ggplot2::geom_histogram() + facet_wrap(metric.res$variable, scales = "free_x") + xlab("Value")
   plot <- plot + ylab("Count") + ggtitle(paste("Distribution of metrics for", nrow(grid.search(object)$test.results), "models"))
+  plot <- plot + DigitalDLSorterTheme() + theme
   return(plot)
 }
 
@@ -749,18 +845,19 @@ boxplotGrid <- function(
   object,
   param,
   metric = "loss",
-  jitter_by = NULL,
-  facet_by = NULL,
+  jitter.by = NULL,
+  facet.by = NULL,
   title = NULL,
-  quantile.cut = 0.95
+  quantile.cut = 0.95,
+  theme = NULL
 ) {
-  if (!is.null(jitter_by)){
-    jitter <- ggplot2::geom_jitter(size=2, aes(color=factor(.data[[jitter_by]]))) 
+  if (!is.null(jitter.by)){
+    jitter <- ggplot2::geom_jitter(size=2, aes(color=factor(.data[[jitter.by]]))) 
   }
   else {jitter = NULL}
 
-  if (!is.null(facet_by)){
-    facet <- ggplot2::facet_grid(grid.search(object)$test.results[[facet_by]])
+  if (!is.null(facet.by)){
+    facet <- ggplot2::facet_grid(grid.search(object)$test.results[[facet.by]])
   }
   else {facet = NULL}
 
@@ -774,20 +871,37 @@ boxplotGrid <- function(
     xlab(param) + 
     jitter + 
     facet + 
-    ggplot2::labs(color= jitter_by, title=title) +
+    ggplot2::labs(color= jitter.by, title=title) +
     ggplot2::coord_cartesian(y = c(0, quantile(grid.search(object)$test.results[,metric], quantile.cut)))
+  
+  plot <- plot + DigitalDLSorterTheme() + theme
   return(plot)
 }
 
 paramsBoxplot <- function(
   object,
   metric = "loss",
-  quantile.cut = 0.95
+  quantile.cut = 0.95,
+  facet.by = NULL 
+  # jitter = FALSE mejor no
 ) {
-  plots <- lapply(params(object), function (p) (boxplotGrid(ddls, metric = metric, param = p, title = as.character(p), quantile.cut = quantile.cut)))
+  plots <- lapply(params(object), 
+    function (p) (boxplotGrid(ddls, 
+      metric = metric, 
+      param = p, 
+      title = as.character(p), 
+      quantile.cut = quantile.cut)))
   return(gridExtra::grid.arrange(grobs=plots)) 
     #top=grid::textGrob(stringr::str_to_title(metric), gp=gpar(fontsize=18))))
 }
+
+# .jitter.paramsBoxplot <- function(
+#   jitter, 
+#   p
+# ){
+#   if (jitter){return(p)}
+#   else {return(NULL)}
+# }
 
 .normdata2 <- function(
   x

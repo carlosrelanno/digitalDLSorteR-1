@@ -1054,7 +1054,7 @@ blandAltmanLehPlot <- function(
     plot <- plot + facet_wrap(as.formula(paste("~", facet.by)),
                               nrow = nrow, ncol = ncol, ...)
   }
-  plot <- plot + theme +
+  plot <- plot +
     geom_hline(aes(yintercept = mean(.data[["Diff"]])), linetype = "dashed") +
     geom_hline(
       aes(yintercept = mean(.data[["Diff"]]) + 1.96 * sd(.data[["Diff"]])),
@@ -1066,7 +1066,7 @@ blandAltmanLehPlot <- function(
     ) +
     xlab(x.lab) + ylab(y.lab) +
     ggtitle(title.plot) +
-    DigitalDLSorterTheme()
+    DigitalDLSorterTheme() + theme
   if (density)
     plot <- plot + stat_density_2d(colour = color.density,
                                    alpha = 0.9,
@@ -1221,10 +1221,10 @@ barErrorPlot <- function(
       ymin = .data[[err.mean]] - .data[[err.dis]],
       ymax = .data[[err.mean]] + .data[[err.dis]]
     )
-  ) + theme + geom_errorbar(width = 0.2) + geom_point(size = 1.5) +
+  ) + geom_errorbar(width = 0.2) + geom_point(size = 1.5) +
     xlab(by) + ylab(error) + ggtitle(title.plot) +
     theme(axis.text.x = element_text(
       size = 8, angle = angle, hjust = hjust, vjust = 0.5
-    )) + DigitalDLSorterTheme()
+    )) + DigitalDLSorterTheme() + theme
   return(plot)
 }
