@@ -4,7 +4,7 @@
 \alias{gridParamDist}
 \title{Histogram of the distribution of a given parameter}
 \usage{
-gridParamDist(object, param, ...)
+gridParamDist(object, param, theme = NULL, ...)
 }
 \arguments{
 \item{object}{\code{\linkS4class{DigitalDLSorter}} object with
@@ -12,6 +12,8 @@ gridParamDist(object, param, ...)
 
 \item{param}{The parameter to plot. The available parameters can be known
 using \code{params()}}
+
+\item{theme}{\pkg{ggplot2} theme.}
 
 \item{...}{}
 }

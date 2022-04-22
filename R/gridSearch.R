@@ -17,6 +17,17 @@ NULL
 #'
 #' The \code{\linkS4class{DigitalDLSorter}} object must contain previously
 #' simulated pseudobulks in the \code{bulk.simul} slot.
+#' 
+#' The customizable parameters and their defaults are:
+#'    num_layers = 2,
+#'    num_units = 200,
+#'    num_epochs = 10,
+#'    batch_size = 20,
+#'    dropout_rate = 0.25,
+#'    activation_fun = "relu",
+#'    loss_fun = "kullback_leibler_divergence",
+#'    learning_rate = 0.001,
+#'    pseudobulk_fun = "MeanCPM"
 #'
 #' @param object  \code{\linkS4class{DigitalDLSorter}} object with
 #'   \code{bulk.simul} slot.
@@ -57,6 +68,35 @@ NULL
 #'   This is recommended since the process can take a long time.
 #' @param backup.each Integer indicating every how many models the backup file
 #'   should be updated. (10 by default).
+#'   
+#' @examples
+#' \dontrun{
+#' # Specify the parameter values:
+#' params = list(
+#'   num_layers = c(2, 4, 6, 8),
+#'   num_units = c(200, 400, 600, 800),
+#'   num_epochs = c(5, 10, 15, 20),
+#'   batch_size = c(20, 50, 100),
+#'   dropout_rate = c(0, 0.25, 0.5),
+#'   activation_fun = c("relu"),
+#'   loss_fun = c("kullback_leibler_divergence", "categorical_crossentropy"),
+#'   learning_rate = c(0.001, 0.005))
+#' 
+#' # Run the gridSearch function
+#' ddls <- gridSearch(ddls, 
+#'                    params = params, 
+#'                    combine = "both", 
+#'                    subset = 500,
+#'                    prop.test = 0.3,
+#'                    models = 500,
+#'                    location = "save_folder_path",
+#'                    name = "example",
+#'                    metrics = c("accuracy", "mean_absolute_error",
+#'                             "categorical_accuracy", "mean_absolute_percentage_error", 
+#'                             "categorical_crossentropy", "kullback_leibler_divergence"),
+#'                    backup.file = "path",
+#'                    backup.each = 5)
+#' }
 gridSearch <- function( 
   object,
   params,
@@ -697,10 +737,17 @@ loadGridSearchRDS <- function(
 #'   \code{grid.search} slot.
 #' @param param The parameter to plot. The available parameters can be known
 #'   using \code{params()}
+#' @param theme \pkg{ggplot2} theme.
 #' @param ... 
+#' 
+#' @example 
+#' \dontrun{
+#' gridParamDist(ddls, param = "num_layers")
+#' }
 gridParamDist <- function(
   object,
   param,
+  theme = NULL,
   ...
 ) {
   if (is.null(grid.search(object))){
@@ -711,6 +758,7 @@ gridParamDist <- function(
   }
   plot <- ggplot(grid.search(object)$test.results ,aes(x=factor(.data[[param]])))+ geom_bar(...) + xlab(param)
   plot <- plot + ylab("Count")
+  plot <- plot + DigitalDLSorterTheme() + theme
   return(plot)
 }
 
@@ -720,6 +768,7 @@ gridParamDist <- function(
 #'
 #' @param object \code{\linkS4class{DigitalDLSorter}} object with
 #'   \code{grid.search} slot.
+#' @param theme \pkg{ggplot2} theme.
 #' @param ... 
 gridParamSDist <- function(
   object,
@@ -735,6 +784,19 @@ gridParamSDist <- function(
   return(plot)
 }
 
+#' Histogram of the distribution of a given metric
+#'
+#' Display the distribution of a given metric between all generated models.
+#'
+#' @param object \code{\linkS4class{DigitalDLSorter}} object with
+#'   \code{grid.search} slot.
+#' @param metric The metric to plot. The available metrics can be known using
+#'   \code{metrics()}.
+#' @param set The data set to use. Can be set to \code{test.results} (evaluation
+#'   using the test set) or \code{train.results} (data about the last training
+#'   epoch, with train and validation metrics).
+#' @param normalize Boolean indicating if the metric is going to be normalized.
+#' @param theme \pkg{ggplot2} theme.
 gridMetricDist <- function(
   object,
   metric = "loss",
@@ -763,6 +825,19 @@ gridMetricDist <- function(
   return(plot)
 }
 
+#' Histograms of the distribution of metrics
+#'
+#' Display the distribution of all metrics between all generated models.
+#'
+#' @param object \code{\linkS4class{DigitalDLSorter}} object with
+#'   \code{grid.search} slot.
+#' @param set The data set to use. Can be set to \code{test.results} (evaluation
+#'   using the test set) or \code{train.results} (data about the last training
+#'   epoch, with train and validation metrics).
+#' @param theme \pkg{ggplot2} theme.
+#' @param normalize Boolean indicating if the metrics are going to be
+#'   normalized.
+#' @param ...
 gridMetricSDist <- function(
   object,
   set = "test.results",
@@ -789,17 +864,30 @@ gridMetricSDist <- function(
   return(plot)
 }
 
+#' Complex heatmap with the best models and parameters
+#'
+#' Display the best models according to a given metric and visualize their
+#' parameters.
+#'
+#' @param object \code{\linkS4class{DigitalDLSorter}} object with
+#'   \code{grid.search} slot.
+#' @param sort.metric The metric that is going to be used to sort the models. To
+#'   see available metrics use \code{metrics()}.
+#' @param decreasing Boolean indicating if the sort order is decreasing. Useful
+#'   if sorting by accuracy.
+#' @param n.models Integer indicating the number of models to be displayed.
 gridMap <- function(
   # // TODO Cambiar colores, coloracón por ranking de modelos, añadir numeros de metricas
   object,
   sort.metric = "kullback_leibler_divergence",
+  decreasing = FALSE,
   n.models = 20
 ) {
   metrics <- setdiff(colnames(grid.search(object)$test.results), names(grid.search(object)$params))
   metrics <- metrics[metrics != "loss"]
   metric.res <- as.data.frame(apply(grid.search(object)$test.results[,metrics],2,.normdata2))
 
-  models <- order(grid.search(object)$test.results[,sort.metric])[1:n.models]
+  models <- order(grid.search(object)$test.results[,sort.metric], decreasing=decreasing)[1:n.models]
   paramsAnnotDf <- as.data.frame(apply(grid.search(object)$test.results[,names(grid.search(object)$params)],2,function (x) {return(factor(x))}))
   a = ComplexHeatmap::HeatmapAnnotation(df = paramsAnnotDf[models,], which = "row")
 
@@ -862,7 +950,7 @@ boxplotGrid <- function(
   else {facet = NULL}
 
   if (is.null(title)){
-    title <- paste(stringr::str_to_title(metric), "by parameter")
+    title <- paste(stringr::str_to_title(metric), "by", param)
   }
 
   plot <- ggplot(

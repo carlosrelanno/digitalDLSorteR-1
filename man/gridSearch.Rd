@@ -88,4 +88,44 @@ stored on the fly using the \code{backup.file} argument.
 \details{
 The \code{\linkS4class{DigitalDLSorter}} object must contain previously
 simulated pseudobulks in the \code{bulk.simul} slot.
+
+The customizable parameters and their defaults are:
+num_layers = 2,
+num_units = 200,
+num_epochs = 10,
+batch_size = 20,
+dropout_rate = 0.25,
+activation_fun = "relu",
+loss_fun = "kullback_leibler_divergence",
+learning_rate = 0.001,
+pseudobulk_fun = "MeanCPM"
+}
+\examples{
+\dontrun{
+# Specify the parameter values:
+params = list(
+  num_layers = c(2, 4, 6, 8),
+  num_units = c(200, 400, 600, 800),
+  num_epochs = c(5, 10, 15, 20),
+  batch_size = c(20, 50, 100),
+  dropout_rate = c(0, 0.25, 0.5),
+  activation_fun = c("relu"),
+  loss_fun = c("kullback_leibler_divergence", "categorical_crossentropy"),
+  learning_rate = c(0.001, 0.005))
+
+# Run the gridSearch function
+ddls <- gridSearch(ddls, 
+                   params = params, 
+                   combine = "both", 
+                   subset = 500,
+                   prop.test = 0.3,
+                   models = 500,
+                   location = "save_folder_path",
+                   name = "example",
+                   metrics = c("accuracy", "mean_absolute_error",
+                            "categorical_accuracy", "mean_absolute_percentage_error", 
+                            "categorical_crossentropy", "kullback_leibler_divergence"),
+                   backup.file = "path",
+                   backup.each = 5)
+}
 }
