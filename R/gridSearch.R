@@ -72,7 +72,7 @@ NULL
 #' @examples
 #' \dontrun{
 #' # Specify the parameter values:
-#' params = list(
+#' params <- list(
 #'   num_layers = c(2, 4, 6, 8),
 #'   num_units = c(200, 400, 600, 800),
 #'   num_epochs = c(5, 10, 15, 20),
@@ -99,7 +99,7 @@ NULL
 #' }
 gridSearch <- function( 
   object,
-  params,
+  params = NULL,
   combine = "bulk",
   verbose = TRUE,
   view.metrics.plot = TRUE, 
@@ -117,10 +117,36 @@ gridSearch <- function(
   backup.file = "",
   backup.each = 10
 ) {
+  # Check default parameters
+  default.params <- list(
+    num_layers = 2,
+    num_units = 200,
+    num_epochs = 10,
+    batch_size = 20,
+    dropout_rate = 0.25,
+    activation_fun = "relu",
+    loss_fun = "kullback_leibler_divergence",
+    learning_rate = 0.001,
+    pseudobulk_fun = "MeanCPM"
+  )
 
   if (is.null(params)){
     stop("Some parameters must be specified as a list in the 'params' argument")
   }
+  else if (class(params) != "list"){
+    stop("'params' argument must be a list. Check documentation for more information.")
+  }
+  else if (is.null(names(params))){
+    stop("'params' argument must be a named list. Check documentation for more information.")
+  }
+  else if (!all(names(params) %in% names(default.params))){
+    stop("Parameter names do not match with the available ones. Check documentation for more information.")
+  }
+
+  if (is.null(bulk.simul(object))){
+    stop("'bulk.simul' slot is empty")
+  }
+
 
   if (save.files){
     if (is.null(location)) {
@@ -167,18 +193,6 @@ gridSearch <- function(
     message(paste("Starting grid search with", nrow(combinations), "different models"))
   }
 
-  # Check default parameters
-  default.params <- list(
-    num_layers = 2,
-    num_units = 200,
-    num_epochs = 10,
-    batch_size = 20,
-    dropout_rate = 0.25,
-    activation_fun = "relu",
-    loss_fun = "kullback_leibler_divergence",
-    learning_rate = 0.001,
-    pseudobulk_fun = "MeanCPM"
-  )
   # Set default parameters if are not defined by user
   defaults <- data.frame(default.params[setdiff(names(default.params), names(params))])
   
@@ -244,6 +258,7 @@ gridSearch <- function(
     if (backup.file != "" & i%%backup.each == 0){
       saveRDS(list(params = params, train.results = na.omit(train.results), test.results = na.omit(test.results)), backup.file)
     }
+    gc() ### !!!!!!!!!!!!!!!!!!!!!!
   }
 
   if (save.files){

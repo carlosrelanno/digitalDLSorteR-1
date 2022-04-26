@@ -6,7 +6,7 @@
 \usage{
 gridSearch(
   object,
-  params,
+  params = NULL,
   combine = "bulk",
   verbose = TRUE,
   view.metrics.plot = TRUE,
@@ -103,7 +103,7 @@ pseudobulk_fun = "MeanCPM"
 \examples{
 \dontrun{
 # Specify the parameter values:
-params = list(
+params <- list(
   num_layers = c(2, 4, 6, 8),
   num_units = c(200, 400, 600, 800),
   num_epochs = c(5, 10, 15, 20),

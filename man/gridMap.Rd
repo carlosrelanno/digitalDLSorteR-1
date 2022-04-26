@@ -4,7 +4,12 @@
 \alias{gridMap}
 \title{Complex heatmap with the best models and parameters}
 \usage{
-gridMap(object, sort.metric = "kullback_leibler_divergence", n.models = 20)
+gridMap(
+  object,
+  sort.metric = "kullback_leibler_divergence",
+  decreasing = FALSE,
+  n.models = 20
+)
 }
 \arguments{
 \item{object}{\code{\linkS4class{DigitalDLSorter}} object with
@@ -12,6 +17,9 @@ gridMap(object, sort.metric = "kullback_leibler_divergence", n.models = 20)
 
 \item{sort.metric}{The metric that is going to be used to sort the models. To
 see available metrics use \code{metrics()}.}
+
+\item{decreasing}{Boolean indicating if the sort order is decreasing. Useful
+if sorting by accuracy.}
 
 \item{n.models}{Integer indicating the number of models to be displayed.}
 }
