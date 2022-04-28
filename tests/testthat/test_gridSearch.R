@@ -40,8 +40,19 @@ test_that(
   {
     # object without bulk.simul slot
     expect_error(
+        gridSearch(object = "a", params = params),
+        regexp = "'object' argument must be of class DigitalDLSorter"
+    )
+    expect_error(
     gridSearch(object = DDLS, params = params), 
-      regexp = "'bulk.simul' slot is empty")
+      regexp = "'bulk.simul' slot is empty"
+    )
+    # combine = 'both' without bulk samples
+    expect_error(
+      gridSearch(
+        object = DDLS, combine = "both", params = params, 
+      regexp = "If 'combine = both' is selected, 'bulk.simul' and at least one single cell slot must be provided"
+    ))
   }
 )
 test_that(
@@ -60,6 +71,48 @@ test_that(
         expect_error(
             gridSearch(object = DDLS, params = list(bad.param = c(1, 2))),
             regexp = "Parameter names do not match with the available ones. Check documentation for more information."
+        )
+        expect_error(
+            gridSearch(DDLS, params, prop.test = 2),
+            regexp = "'prop.test' must be a number between 0 and 1"
+        )
+        expect_error(
+            gridSearch(DDLS, params, prop.val = -2),
+            regexp = "'prop.val' must be a number between 0 and 1"
+        )
+    }
+)
+
+test_that(
+    "Test behaviour",
+    {
+        probMatrixValid <- data.frame(
+        Cell_Type = paste0("CellType", seq(4)),
+        from = c(1, 1, 1, 30),
+        to = c(15, 15, 50, 70)
+        )
+        DDLS <- generateBulkCellMatrix(
+            object = DDLS,
+            cell.ID.column = "Cell_ID",
+            cell.type.column = "Cell_Type",
+            prob.design = probMatrixValid,
+            num.bulk.samples = 100,
+            verbose = FALSE
+        )
+        DDLS <- simBulkProfiles(DDLS, verbose = FALSE)
+
+        # On the fly option but no on the fly parameters
+        expect_error(
+            gridSearch(object = DDLS, params = params, on.the.fly = TRUE),
+            regexp = "'on.the.fly' option selected but no given parameters for on the fly bulk generation functions"
+        )
+        expect_message(
+            gridSearch(object = DDLS, params = params, view.metrics.plot = FALSE),
+            regexp = "Starting grid search with 2 different models"
+        )
+        expect_warning(
+            gridSearch(object = DDLS, params = params, subset = 1000, view.metrics.plot = FALSE),
+            regexp = "'subset' parameter is greater than then number of pseudobulks. All pseudobulks are being used for train"
         )
     }
 )

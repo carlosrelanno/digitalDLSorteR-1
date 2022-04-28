@@ -142,11 +142,37 @@ gridSearch <- function(
   else if (!all(names(params) %in% names(default.params))){
     stop("Parameter names do not match with the available ones. Check documentation for more information.")
   }
-
+  if (class(object) != "DigitalDLSorter"){
+    stop("'object' argument must be of class DigitalDLSorter")
+  }
   if (is.null(bulk.simul(object))){
     stop("'bulk.simul' slot is empty")
   }
 
+  if (!on.the.fly) {
+  if ((combine == "both" && is.null(bulk.simul(object)) ||
+        combine == "both" && (is.null(single.cell.real(object)) && 
+                              is.null(single.cell.simul(object))))) {
+    stop("If 'combine = both' is selected, 'bulk.simul' and at least ",
+          "one single cell slot must be provided")
+  } else if (combine == "bulk" && is.null(bulk.simul(object))) {
+    stop("If 'combine' = bulk is selected, 'bulk.simul' must be provided")
+  } else if (is.null(bulk.simul(object, "test"))) {
+    stop("trainDigitalDLSorterModel evaluates DNN model on both types of ", 
+          "profiles: bulk and single-cell. Therefore, bulk data for test ", 
+          "must be provided")
+  }}
+
+  if (on.the.fly & !("pseudobulk_fun" %in% names(params))){
+    stop("'on.the.fly' option selected but no given parameters for on the fly bulk generation functions")
+  }
+
+  if (prop.test > 1 | prop.test < 0){
+    stop("'prop.test' must be a number between 0 and 1")
+  }
+   if (prop.val > 1 | prop.val < 0){
+    stop("'prop.val' must be a number between 0 and 1")
+  }
 
   if (save.files){
     if (is.null(location)) {
@@ -216,7 +242,7 @@ gridSearch <- function(
     # message(parameters)
 
     if (parameters$batch_size > subset * prop.test){
-      warning("Batch size is lower than sample size, skipping model")
+      warning("Sample size is lower than batch size, skipping model")
       test.results[i,] <- c(rep(NA, length(metrics) + 1), combinations[i,])
       next
     }
@@ -258,7 +284,8 @@ gridSearch <- function(
     if (backup.file != "" & i%%backup.each == 0){
       saveRDS(list(params = params, train.results = na.omit(train.results), test.results = na.omit(test.results)), backup.file)
     }
-    gc() ### !!!!!!!!!!!!!!!!!!!!!!
+    keras::k_clear_session() ### !!!!!!!!!!!!!!!!!!!!!! https://github.com/rstudio/keras/issues/339
+    message("using k_clear_session")
   }
 
   if (save.files){
@@ -699,8 +726,14 @@ gridSearch <- function(
       , colnames(prob.cell.types(object, type.data) %>% prob.matrix())]
   }
   # Subset samples 
-  selected_samples <- sample(nrow(probs.matrix), subset) 
-  probs.matrix <- probs.matrix[selected_samples,] ## DEVOLVER LAS MUESTRAS QUE USA???
+  if (subset < nrow(probs.matrix)){
+    selected_samples <- sample(nrow(probs.matrix), subset)
+    probs.matrix <- probs.matrix[selected_samples,] ## DEVOLVER LAS MUESTRAS QUE USA???
+  }
+  else{
+    warning(paste("'subset' parameter is greater than then number of pseudobulks. All pseudobulks are being used for", type.data))
+  } 
+  
 
   # shuffle only if train on the fly
   if (shuffle && !fly) {
