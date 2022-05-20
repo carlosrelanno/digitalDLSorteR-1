@@ -204,10 +204,10 @@ gridSearch <- function(
   }
   
   # Generate results table
-  test.results <- data.frame(matrix(NA, ncol = length(colnames(combinations)) + length(metrics) + 1,
+  test.results <- data.frame(matrix(NA_real_, ncol = length(colnames(combinations)) + length(metrics) + 1,
     nrow = nrow(combinations)))
 
-  train.results <- data.frame(matrix(NA, ncol = length(colnames(combinations)) + 2*(length(metrics) + 1),
+  train.results <- data.frame(matrix(NA_real_, ncol = length(colnames(combinations)) + 2*(length(metrics) + 1),
     nrow = nrow(combinations)))
   
   metric.names <- c("loss", metrics)
@@ -284,7 +284,8 @@ gridSearch <- function(
     if (backup.file != "" & i%%backup.each == 0){
       saveRDS(list(params = params, train.results = na.omit(train.results), test.results = na.omit(test.results)), backup.file)
     }
-    keras::k_clear_session() ### !!!!!!!!!!!!!!!!!!!!!! https://github.com/rstudio/keras/issues/339
+    gc()
+     ### !!!!!!!!!!!!!!!!!!!!!! https://github.com/rstudio/keras/issues/339
     message("using k_clear_session")
   }
 
@@ -627,9 +628,18 @@ gridSearch <- function(
   #   features = rownames(single.cell.real(object))
   # )
   # trained.model(object) <- network.object
-  return(list(test_metrics = test.eval, train_metrics = history, samples = list(train = rownames(prob.matrix.train),
-  test = rownames(prob.matrix.test))))
   if (verbose) message("DONE")
+  rm(list=c("model"))
+  keras::k_clear_session()
+  gc()
+  return(
+    list(
+      test_metrics = test.eval, train_metrics = history, 
+      samples = list(train = rownames(prob.matrix.train),
+      test = rownames(prob.matrix.test))
+    )
+  )
+  
   # return(object)
 }
 
