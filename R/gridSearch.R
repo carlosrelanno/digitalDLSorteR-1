@@ -808,14 +808,25 @@ gridParamDist <- function(
   theme = NULL,
   ...
 ) {
-  if (is.null(grid.search(object))){
-    stop("This object does not have grid search results data to analyze")
+  if (class(object) == "DigitalDLSorter"){
+    if (is.null(grid.search(object))){
+      stop("This object does not have grid search results data to analyze")
+    }
+    data <- grid.search(object)$test.results
+    n.models <- nrow(grid.search(object)$test.results)
   }
-  if (!(param %in% names(grid.search(object)$params))){
-    stop(paste0("This parameter is not available. Available ones are:\n", paste(names(grid.search(object)$params), collapse = " ")))
+  else if (class(object) == "data.frame"){
+    data <- object
+    n.models <- nrow(object)
   }
-  plot <- ggplot(grid.search(object)$test.results ,aes(x=factor(.data[[param]])))+ geom_bar(...) + xlab(param)
+
+  if (!(param %in% params(object))){
+      stop(paste0("This parameter is not available. Available ones are:\n", paste(names(grid.search(object)$params), collapse = " ")))
+    }
+
+  plot <- ggplot(data ,aes(x=factor(.data[[param]])))+ geom_bar(...) + xlab(param)
   plot <- plot + ylab("Count")
+  plot <- plot + ggtitle(paste("Distribution of", param, "for", n.models, "models"))
   plot <- plot + DigitalDLSorterTheme() + theme
   return(plot)
 }
@@ -833,10 +844,18 @@ gridParamSDist <- function(
   theme = NULL,
   ...
 ) {
-  data <- grid.search(object)$test.results[names(grid.search(object)$params)]
+  if (class(object) == "DigitalDLSorter"){
+    data <- grid.search(object)$test.results[params(object)]
+    n.models <- nrow(grid.search(object)$test.results)
+  }
+  else if (class(object) == "data.frame"){
+    data <- object[params(object)]
+    n.models <- nrow(object)
+  }
+  
   data <- reshape2::melt(data, id.vars=NULL)
   plot <- ggplot(data, aes(x=factor(value)))+ geom_bar() + facet_wrap(data$variable, scales = "free_x") + xlab("Value")
-  plot <- plot + ylab("Count") + ggtitle(paste("Distribution of parameters for", nrow(grid.search(object)$test.results), "models"))
+  plot <- plot + ylab("Count") + ggtitle(paste("Distribution of parameters for", n.models, "models"))
   plot <- plot + DigitalDLSorterTheme() + theme
 
   return(plot)
@@ -863,22 +882,28 @@ gridMetricDist <- function(
   theme = NULL,
   ...
 ) {
-   if (is.null(grid.search(object))){
-    stop("This object does not have grid search results data to analyze")
+  if (class(object) == "DigitalDLSorter"){
+    if (is.null(grid.search(object))){
+      stop("This object does not have grid search results data to analyze")
+    }
+    data <- grid.search(object)[[set]][metrics(object)]
   }
-
-  metrics <- setdiff(colnames(grid.search(object)[[set]]), names(grid.search(object)$params))
-  if (!(metric %in% metrics)){
-    stop(paste0("This metric is not available. Available ones are:\n", paste(metrics, collapse = " ")))
+  else if (class(object) == "data.frame"){
+    data <- object[metrics(object)]
+  }
+  n.models <- nrow(data)
+  if (!(metric %in% metrics(object))){
+    stop(paste0("This metric is not available. Available ones are:\n", paste(metrics(object), collapse = " ")))
   }
 
   if (normalize){
-    metric.res <- as.data.frame(apply(grid.search(object)[[set]][,metrics],2,.normdata2))
+    metric.res <- as.data.frame(apply(data,2,.normdata2))
   }
-  else {metric.res <- grid.search(object)[[set]][,metrics]}
+  else {metric.res <- data}
 
   plot <- ggplot(metric.res ,aes(x=.data[[metric]]))+ geom_histogram() + xlab(metric)
   plot <- plot + ylab("Count")
+  plot <- plot + ggtitle(paste("Distribution of", metric, "for", n.models, "models"))
   plot <- plot + DigitalDLSorterTheme() + theme
   return(plot)
 }
@@ -895,12 +920,15 @@ gridMetricDist <- function(
 #' @param theme \pkg{ggplot2} theme.
 #' @param normalize Boolean indicating if the metrics are going to be
 #'   normalized.
+#' @param remove.loss Boolean indicating if the loss column is going to be
+#'   removed when it is a duplicate of some metric.
 #' @param ...
 gridMetricSDist <- function(
   object,
   set = "test.results",
   normalize = TRUE,
   theme = NULL,
+  remove.loss = FALSE,
   ...
 ) {
    if (is.null(grid.search(object))){
@@ -909,6 +937,10 @@ gridMetricSDist <- function(
 
   metrics <- setdiff(colnames(grid.search(object)[[set]]), names(grid.search(object)$params))
   
+  if (remove.loss){
+    metrics <- metrics[metrics != "loss"]
+  }
+
   if (normalize){
     metric.res <- as.data.frame(apply(grid.search(object)[[set]][,metrics],2,.normdata2))
   }
@@ -916,7 +948,7 @@ gridMetricSDist <- function(
 
   metric.res <- reshape2::melt(metric.res, id.vars=NULL)
 
-  plot <- ggplot(metric.res, aes(x=value))+ ggplot2::geom_histogram() + facet_wrap(metric.res$variable, scales = "free_x") + xlab("Value")
+  plot <- ggplot(metric.res, aes(x=value))+ ggplot2::geom_histogram() + facet_wrap(metric.res$variable, scales = "free_y") + xlab("Value")
   plot <- plot + ylab("Count") + ggtitle(paste("Distribution of metrics for", nrow(grid.search(object)$test.results), "models"))
   plot <- plot + DigitalDLSorterTheme() + theme
   return(plot)
@@ -954,10 +986,12 @@ gridMap <- function(
 
   for (p in string.params) {paramsDF[,p] <- factor(paramsDF[,p])}
 
-  hm <- ComplexHeatmap::Heatmap(
+  suppressWarnings(hm <- ComplexHeatmap::Heatmap(
     as.matrix(metric.res[models,]),
+    name = "Value",
     cluster_rows = hclust(cluster::daisy(paramsDF, metric="gower")),
     show_row_names = T) + a
+  )
   ComplexHeatmap::draw(hm)
 }
 
@@ -983,7 +1017,7 @@ gridCorr <- function(
 
   data <- cbind(metric.res, parameters)
   maeCorr <- polycor::hetcor(data)
-  hm <- ComplexHeatmap::Heatmap(maeCorr$correlations,cluster_rows = F,cluster_columns = F)
+  hm <- ComplexHeatmap::Heatmap(maeCorr$correlations,cluster_rows = F,cluster_columns = F, name = "Value")
   return(hm)
 }
 
@@ -1028,7 +1062,7 @@ paramsBoxplot <- function(
   object,
   metric = "loss",
   quantile.cut = 0.95,
-  facet.by = NULL 
+  facet.by = NULL
   # jitter = FALSE mejor no
 ) {
   plots <- lapply(params(object), 
@@ -1058,13 +1092,32 @@ paramsBoxplot <- function(
 params <- function(
   object
 ) {
-  return(names(grid.search(object)$params))
+  if (class(object) == "DigitalDLSorter"){
+    return(names(grid.search(object)$params))
+  }
+  else if (class(object) == "data.frame"){
+    def.params <- c("num_layers",
+                    "num_units",
+                    "num_epochs",
+                    "batch_size",
+                    "dropout_rate",
+                    "activation_fun",
+                    "loss_fun",
+                    "learning_rate",
+                    "pseudobulk_fun")
+    return(intersect(def.params, names(object)))
+  }
 }
 
 metrics <- function(
   object
 ) {
-  metrics <- setdiff(colnames(grid.search(object)$test.results), names(grid.search(object)$params))
+  if (class(object) == "DigitalDLSorter"){
+    metrics <- setdiff(colnames(grid.search(object)$test.results), params(object))
+  }
+  else if (class(object) == "data.frame"){
+    metrics <- setdiff(colnames(object), params(object))
+  }
   return(metrics)
   }
 
