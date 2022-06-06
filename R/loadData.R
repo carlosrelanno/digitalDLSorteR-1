@@ -596,7 +596,7 @@ NULL
     }
   } else if (!block.processing) {
     # list.data[[1]] <- Matrix::Matrix(as.matrix(list.data[[1]]), sparse = TRUE)
-    list.data[[1]] <- Matrix::Matrix(list.data[[1]], sparse = TRUE)
+    list.data[[1]] <- Matrix::Matrix(list.data[[1]], sparse = TRUE) # TODO cambiar esto
   }
   list.data <- .processData(
     counts = list.data[[1]],
